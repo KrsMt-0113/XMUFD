@@ -1,0 +1,252 @@
+/* XMU 下载器 - 内嵌样式 */
+
+#xmu-downloader-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 400px;
+  min-width: 320px;
+  max-height: 600px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(450px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+#xmu-downloader-panel.minimized {
+  max-height: 60px;
+}
+
+#xmu-downloader-header {
+  background: linear-gradient(135deg, #496aff 0%, #5187ef 100%);
+  color: white;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  user-select: none;
+}
+
+#xmu-downloader-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#xmu-downloader-controls {
+  display: flex;
+  gap: 8px;
+}
+
+#xmu-downloader-controls button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  font-size: 16px;
+}
+
+#xmu-downloader-controls button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+#xmu-downloader-content {
+  padding: 16px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+#xmu-downloader-panel.minimized #xmu-downloader-content {
+  display: none;
+}
+
+#xmu-downloader-status {
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #f0f4ff;
+  border-radius: 8px;
+  color: #4a5568;
+  font-size: 14px;
+  text-align: center;
+}
+
+#xmu-downloader-status.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+#xmu-downloader-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.xmu-file-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s;
+}
+
+.xmu-file-item:hover {
+  background: #e9ecef;
+  transform: translateX(-2px);
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.xmu-file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.xmu-file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2d3748;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.xmu-file-id {
+  font-size: 12px;
+  color: #718096;
+}
+
+.xmu-download-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.xmu-download-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
+.xmu-download-btn:active {
+  transform: translateY(0);
+}
+
+.xmu-download-btn:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.xmu-download-all-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 12px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(72, 187, 120, 0.3);
+}
+
+.xmu-download-all-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(72, 187, 120, 0.4);
+}
+
+.xmu-download-all-btn:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.xmu-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: #718096;
+}
+
+.xmu-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.xmu-empty-text {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 滚动条样式 */
+#xmu-downloader-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+#xmu-downloader-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+#xmu-downloader-content::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+#xmu-downloader-content::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* 加载动画 */
+.xmu-loading {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

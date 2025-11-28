@@ -1,10 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "XMUFD",
-  "version": "1.0.0",
-  "description": "下载课程附件的浏览器扩展，适用于厦门大学数字教育平台（lnt.xmu.edu.cn）。",
+  "name": "XMUFD Inline",
+  "version": "2.0.0",
+  "description": "在网页内直接显示下载按钮，无需弹窗",
   "permissions": [
-    "webRequest",
     "downloads",
     "storage"
   ],
@@ -15,7 +14,6 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -31,8 +29,10 @@
     {
       "matches": ["https://lnt.xmu.edu.cn/*"],
       "js": ["content.js"],
+      "css": ["styles.css"],
       "run_at": "document_start",
       "all_frames": true
     }
   ]
 }
+

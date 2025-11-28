@@ -1,40 +1,274 @@
-// 拦截XHR和Fetch请求以捕获API响应
 (function() {
   'use strict';
 
-  console.log('[XMU Downloader] Content script loaded!');
-  console.log('[XMU Downloader] Current URL:', window.location.href);
-  console.log('[XMU Downloader] Time:', new Date().toLocaleTimeString());
+  console.log('[XMU Downloader Inline] Content script loaded!');
+  console.log('[XMU Downloader Inline] Current URL:', window.location.href);
 
-  // 拦截Fetch API
+  let filesData = [];
+  let panel = null;
+
+  // 创建下载面板UI
+  function createDownloadPanel() {
+    if (panel) {
+      return panel;
+    }
+
+    const panelHTML = `
+      <div id="xmu-downloader-panel">
+        <div id="xmu-downloader-header">
+          <div id="xmu-downloader-title">
+            <span>XMUFD</span>
+          </div>
+          <div id="xmu-downloader-controls">
+            <button id="xmu-minimize-btn" title="最小化">−</button>
+            <button id="xmu-close-btn" title="关闭">×</button>
+          </div>
+        </div>
+        <div id="xmu-downloader-content">
+          <div id="xmu-downloader-status">正在检测文件...</div>
+          <div id="xmu-files-container"></div>
+        </div>
+      </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = panelHTML;
+    panel = tempDiv.firstElementChild;
+
+    document.body.appendChild(panel);
+
+    // 添加拖拽功能
+    makeDraggable(panel);
+
+    // 添加控制按钮事件
+    const minimizeBtn = panel.querySelector('#xmu-minimize-btn');
+    const closeBtn = panel.querySelector('#xmu-close-btn');
+
+    minimizeBtn.addEventListener('click', () => {
+      panel.classList.toggle('minimized');
+      minimizeBtn.textContent = panel.classList.contains('minimized') ? '+' : '−';
+    });
+
+    closeBtn.addEventListener('click', () => {
+      panel.style.display = 'none';
+    });
+
+    console.log('[XMU Downloader Inline] Panel created');
+    return panel;
+  }
+
+  // 使面板可拖拽
+  function makeDraggable(element) {
+    const header = element.querySelector('#xmu-downloader-header');
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+    header.onmousedown = dragMouseDown;
+
+    function dragMouseDown(e) {
+      e.preventDefault();
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      document.onmouseup = closeDragElement;
+      document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+      e.preventDefault();
+      pos1 = pos3 - e.clientX;
+      pos2 = pos4 - e.clientY;
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      element.style.top = (element.offsetTop - pos2) + "px";
+      element.style.left = (element.offsetLeft - pos1) + "px";
+      element.style.right = "auto";
+    }
+
+    function closeDragElement() {
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
+  }
+
+  // 更新文件列表显示
+  function updateFilesList(files) {
+    filesData = files;
+
+    if (!panel) {
+      createDownloadPanel();
+    }
+
+    panel.style.display = 'block';
+
+    const statusDiv = panel.querySelector('#xmu-downloader-status');
+    const container = panel.querySelector('#xmu-files-container');
+
+    if (!files || files.length === 0) {
+      statusDiv.textContent = '当前页面没有检测到文件';
+      statusDiv.className = '';
+      container.innerHTML = `
+        <div class="xmu-empty-state">
+          <div class="xmu-empty-icon">📭</div>
+          <div class="xmu-empty-text">
+            请导航到包含文件的活动页面<br>
+            文件检测到后会自动显示
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    statusDiv.textContent = `检测到 ${files.length} 个文件`;
+    statusDiv.className = 'success';
+
+    let html = '';
+    files.forEach((file, index) => {
+      html += `
+        <div class="xmu-file-item" data-index="${index}">
+          <div class="xmu-file-info">
+            <div class="xmu-file-name" title="${escapeHtml(file.name)}">
+              ${escapeHtml(file.name)}
+            </div>
+            <div class="xmu-file-id">ID: ${file.id}</div>
+          </div>
+          <button class="xmu-download-btn" data-file-id="${file.id}" data-file-name="${escapeHtml(file.name)}">
+            下载
+          </button>
+        </div>
+      `;
+    });
+
+    if (files.length > 1) {
+      html += `
+        <button class="xmu-download-all-btn" id="xmu-download-all">
+          下载全部 (${files.length} 个文件)
+        </button>
+      `;
+    }
+
+    container.innerHTML = html;
+
+    // 添加下载按钮事件
+    container.querySelectorAll('.xmu-download-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const fileId = this.getAttribute('data-file-id');
+        const fileName = this.getAttribute('data-file-name');
+        downloadFile(fileId, fileName, this);
+      });
+    });
+
+    // 添加下载全部按钮事件
+    const downloadAllBtn = container.querySelector('#xmu-download-all');
+    if (downloadAllBtn) {
+      downloadAllBtn.addEventListener('click', function() {
+        downloadAllFiles(this);
+      });
+    }
+
+    console.log('[XMU Downloader Inline] Files list updated:', files.length);
+  }
+
+  // 下载单个文件
+  function downloadFile(fileId, fileName, button) {
+    console.log('[XMU Downloader Inline] Downloading:', fileName);
+
+    button.disabled = true;
+    button.textContent = '下载中...';
+
+    chrome.runtime.sendMessage({
+      type: 'DOWNLOAD_FILE',
+      fileId: fileId,
+      fileName: fileName
+    }, response => {
+      if (chrome.runtime.lastError) {
+        console.error('[XMU Downloader Inline] Download error:', chrome.runtime.lastError);
+        button.textContent = '失败';
+        setTimeout(() => {
+          button.textContent = '重试';
+          button.disabled = false;
+        }, 2000);
+      } else if (response && response.success) {
+        console.log('[XMU Downloader Inline] Download success');
+        button.textContent = '✓ 完成';
+        setTimeout(() => {
+          button.textContent = '下载';
+          button.disabled = false;
+        }, 2000);
+      } else {
+        console.error('[XMU Downloader Inline] Download failed:', response);
+        button.textContent = '失败';
+        setTimeout(() => {
+          button.textContent = '重试';
+          button.disabled = false;
+        }, 2000);
+      }
+    });
+  }
+
+  // 下载全部文件
+  function downloadAllFiles(button) {
+    console.log('[XMU Downloader Inline] Downloading all files:', filesData.length);
+
+    button.disabled = true;
+    const originalText = button.textContent;
+
+    let completed = 0;
+    const total = filesData.length;
+
+    filesData.forEach((file, index) => {
+      setTimeout(() => {
+        chrome.runtime.sendMessage({
+          type: 'DOWNLOAD_FILE',
+          fileId: file.id,
+          fileName: file.name
+        }, response => {
+          completed++;
+          button.textContent = `下载中... (${completed}/${total})`;
+
+          if (completed === total) {
+            button.textContent = '✓ 全部完成';
+            setTimeout(() => {
+              button.textContent = originalText;
+              button.disabled = false;
+            }, 3000);
+          }
+        });
+      }, index * 500); // 每个文件间隔500ms
+    });
+  }
+
+  // HTML转义
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // 拦截 fetch 请求
   const originalFetch = window.fetch;
   window.fetch = async function(...args) {
     const url = args[0];
 
-    // 记录所有API请求以便调试
     if (typeof url === 'string' && url.includes('/api/')) {
-      console.log('[XMU Downloader] Fetch API request:', url);
+      console.log('[XMU Downloader Inline] Fetch API request:', url);
     }
 
     const response = await originalFetch.apply(this, args);
 
-    // 检查是否是目标API - 使用更宽松的匹配
     if (typeof url === 'string') {
       const isUploadRef = url.includes('upload_reference') || url.includes('upload-reference');
       const isActivities = url.includes('/api/activities/');
       const hasReference = url.includes('reference');
 
       if ((isActivities && isUploadRef) || (isActivities && hasReference)) {
-        console.log('[XMU Downloader] ✓ MATCHED upload_references API!');
-        console.log('[XMU Downloader] Matched URL:', url);
-        // 克隆响应以便我们可以读取它
+        console.log('[XMU Downloader Inline] ✓ MATCHED upload_references API!');
+        console.log('[XMU Downloader Inline] Matched URL:', url);
         const clonedResponse = response.clone();
 
         clonedResponse.json().then(data => {
-          console.log('[XMU Downloader] API Response data:', data);
+          console.log('[XMU Downloader Inline] API Response data:', data);
           processFilesData(data);
         }).catch(err => {
-          console.error('[XMU Downloader] 解析响应失败:', err);
+          console.error('[XMU Downloader Inline] 解析响应失败:', err);
         });
       }
     }
@@ -42,18 +276,17 @@
     return response;
   };
 
-  console.log('[XMU Downloader] Fetch interceptor installed');
+  console.log('[XMU Downloader Inline] Fetch interceptor installed');
 
-  // 拦截XMLHttpRequest
+  // 拦截 XMLHttpRequest
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
 
   XMLHttpRequest.prototype.open = function(method, url, ...rest) {
     this._url = url;
 
-    // 记录所有API请求以便调试
     if (typeof url === 'string' && url.includes('/api/')) {
-      console.log('[XMU Downloader] XHR API request:', url);
+      console.log('[XMU Downloader Inline] XHR API request:', url);
     }
 
     return originalOpen.apply(this, [method, url, ...rest]);
@@ -69,14 +302,14 @@
         const hasReference = self._url.includes('reference');
 
         if ((isActivities && isUploadRef) || (isActivities && hasReference)) {
-          console.log('[XMU Downloader] ✓ MATCHED upload_references API via XHR!');
-          console.log('[XMU Downloader] Matched URL:', self._url);
+          console.log('[XMU Downloader Inline] ✓ MATCHED upload_references API via XHR!');
+          console.log('[XMU Downloader Inline] Matched URL:', self._url);
           try {
             const data = JSON.parse(this.responseText);
-            console.log('[XMU Downloader] XHR Response data:', data);
+            console.log('[XMU Downloader Inline] XHR Response data:', data);
             processFilesData(data);
           } catch (err) {
-            console.error('[XMU Downloader] 解析响应失败:', err);
+            console.error('[XMU Downloader Inline] 解析响应失败:', err);
           }
         }
       }
@@ -85,275 +318,118 @@
     return originalSend.apply(this, args);
   };
 
-  console.log('[XMU Downloader] XHR interceptor installed');
+  console.log('[XMU Downloader Inline] XHR interceptor installed');
 
   // 处理文件数据
   function processFilesData(data) {
-    console.log('[XMU Downloader] Processing files data...');
-    console.log('[XMU Downloader] Data keys:', Object.keys(data));
+    console.log('[XMU Downloader Inline] Processing files data...');
+    console.log('[XMU Downloader Inline] Data keys:', Object.keys(data));
 
-    // 尝试多种可能的字段名
     const references = data.referances || data.references || data.value || [];
-    console.log('[XMU Downloader] Found references:', references);
+    console.log('[XMU Downloader Inline] Found references:', references);
 
     if (references && references.length > 0) {
       const files = references.map(ref => {
-        console.log('[XMU Downloader] Processing reference:', ref);
+        console.log('[XMU Downloader Inline] Processing reference:', ref);
         return {
           id: ref.id || ref.reference_id,
           name: ref.name || ref.reference_name || ref.title || '未命名文件'
         };
       });
 
-      console.log('[XMU Downloader] Extracted files:', files);
-
-      // 发送到background script
-      chrome.runtime.sendMessage({
-        type: 'FILES_DETECTED',
-        files: files
-      }, response => {
-        if (chrome.runtime.lastError) {
-          console.error('[XMU Downloader] 发送消息失败:', chrome.runtime.lastError);
-        } else {
-          console.log('[XMU Downloader] ✓ 成功发送', files.length, '个文件到background');
-          console.log('[XMU Downloader] Response:', response);
-        }
-      });
+      console.log('[XMU Downloader Inline] Extracted files:', files);
+      updateFilesList(files);
     } else {
-      console.log('[XMU Downloader] No files found in response');
+      console.log('[XMU Downloader Inline] No files found in response');
+      updateFilesList([]);
     }
   }
 
-  console.log('[XMU Downloader] All interceptors ready!');
-  console.log('[XMU Downloader] Waiting for API requests...');
-
-  // 添加一个全局函数供手动测试
-  window.XMUDownloaderTest = function() {
-    console.log('[XMU Downloader] Manual test function called');
-    console.log('[XMU Downloader] Current interceptors status:');
-    console.log('[XMU Downloader] - Fetch:', window.fetch !== originalFetch);
-    console.log('[XMU Downloader] - XHR:', XMLHttpRequest.prototype.open !== originalOpen);
-
-    // 列出当前页面发起的所有请求（如果有Performance API）
-    if (window.performance && window.performance.getEntriesByType) {
-      const resources = window.performance.getEntriesByType('resource');
-      console.log('[XMU Downloader] Total resources loaded:', resources.length);
-      const apiRequests = resources.filter(r => r.name.includes('/api/'));
-      console.log('[XMU Downloader] API requests found:', apiRequests.length);
-      apiRequests.forEach(r => {
-        console.log('[XMU Downloader]   ->', r.name);
-      });
-    }
-  };
-
-  console.log('[XMU Downloader] Type XMUDownloaderTest() to run diagnostics');
-
-  // 自动运行一次诊断
-  setTimeout(function() {
-    console.log('[XMU Downloader] === AUTO-RUNNING DIAGNOSTICS ===');
-    if (window.performance && window.performance.getEntriesByType) {
-      const resources = window.performance.getEntriesByType('resource');
-      const apiRequests = resources.filter(r => r.name.includes('/api/'));
-      console.log('[XMU Downloader] Total API requests found:', apiRequests.length);
-      if (apiRequests.length > 0) {
-        console.log('[XMU Downloader] API URLs:');
-        apiRequests.forEach(r => {
-          console.log('[XMU Downloader]   ->', r.name);
-        });
-      } else {
-        console.log('[XMU Downloader] ❌ No API requests found in performance API');
-        console.log('[XMU Downloader] This could mean:');
-        console.log('[XMU Downloader] 1. Requests happened before extension loaded');
-        console.log('[XMU Downloader] 2. Page uses WebSocket or other methods');
-        console.log('[XMU Downloader] 3. Requests are in iframe');
-      }
-    }
-    console.log('[XMU Downloader] === END DIAGNOSTICS ===');
-  }, 2000);
-
-  // 监听DOM变化，检测动态加载的内容
-  const observer = new MutationObserver(function(mutations) {
-    console.log('[XMU Downloader] DOM changed, mutations:', mutations.length);
-  });
-
-  if (document.body) {
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-    console.log('[XMU Downloader] MutationObserver started');
-  }
-
-  // 监听页面加载完成
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('[XMU Downloader] DOMContentLoaded event fired');
-    });
-  } else {
-    console.log('[XMU Downloader] Document already loaded (readyState:', document.readyState + ')');
-  }
-
+  // 页面加载完成后检查文件
   window.addEventListener('load', function() {
-    console.log('[XMU Downloader] Window load event fired');
+    console.log('[XMU Downloader Inline] Window load event fired');
     checkAndFetchFiles();
   });
 
-  // 监听hash变化（单页应用导航）
+  // hash变化时检查文件
   window.addEventListener('hashchange', function() {
-    console.log('[XMU Downloader] Hash changed, checking for activity ID...');
+    console.log('[XMU Downloader Inline] Hash changed, checking for activity ID...');
     checkAndFetchFiles();
   });
 
-  // 检查URL并获取文件
+  // 检查并获取文件
   function checkAndFetchFiles() {
     const url = window.location.href;
-    console.log('[XMU Downloader] Analyzing URL:', url);
-
-    // URL格式: https://lnt.xmu.edu.cn/course/72573/learning-activity/full-screen#/653772
-    // 活动ID在hash中: #/activityId
+    console.log('[XMU Downloader Inline] Analyzing URL:', url);
 
     let activityId = null;
 
-    // 方法1: 从hash中提取 (#/数字)
+    // 尝试从hash中提取activity ID
     const hashMatch = window.location.hash.match(/#\/(\d+)/);
     if (hashMatch) {
       activityId = hashMatch[1];
-      console.log('[XMU Downloader] ✓ Found activity ID in hash:', activityId);
+      console.log('[XMU Downloader Inline] ✓ Found activity ID in hash:', activityId);
     }
 
-    // 方法2: 从路径中提取 (/activities/数字)
+    // 尝试从路径中提取activity ID
     if (!activityId) {
       const pathMatch = url.match(/\/activities\/(\d+)/);
       if (pathMatch) {
         activityId = pathMatch[1];
-        console.log('[XMU Downloader] ✓ Found activity ID in path:', activityId);
+        console.log('[XMU Downloader Inline] ✓ Found activity ID in path:', activityId);
       }
     }
 
-    // 方法3: 从learning-activity路径后提取
+    // 尝试从learning-activity中提取
     if (!activityId) {
       const learningMatch = url.match(/learning-activity\/[^#]*#\/(\d+)/);
       if (learningMatch) {
         activityId = learningMatch[1];
-        console.log('[XMU Downloader] ✓ Found activity ID in learning-activity:', activityId);
+        console.log('[XMU Downloader Inline] ✓ Found activity ID in learning-activity:', activityId);
       }
     }
 
     if (activityId) {
-      console.log('[XMU Downloader] Activity ID confirmed:', activityId);
+      console.log('[XMU Downloader Inline] Activity ID confirmed:', activityId);
       fetchFilesForActivity(activityId);
     } else {
-      console.log('[XMU Downloader] ❌ No activity ID found in URL');
-      const courseMatch = url.match(/\/course\/(\d+)/);
-      if (courseMatch) {
-        console.log('[XMU Downloader] Found course ID:', courseMatch[1], '- waiting for activity selection...');
-      }
-      tryExtractFromDOM();
+      console.log('[XMU Downloader Inline] ❌ No activity ID found in URL');
     }
   }
 
-  // 获取指定活动的文件
+  // 获取活动的文件
   function fetchFilesForActivity(activityId) {
     const apiUrl = `https://lnt.xmu.edu.cn/api/activities/${activityId}/upload_references`;
-    console.log('[XMU Downloader] Attempting to fetch:', apiUrl);
+    console.log('[XMU Downloader Inline] Attempting to fetch:', apiUrl);
 
     fetch(apiUrl, {
       credentials: 'include'
     })
       .then(response => {
-        console.log('[XMU Downloader] Fetch response status:', response.status);
+        console.log('[XMU Downloader Inline] Fetch response status:', response.status);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         return response.json();
       })
       .then(data => {
-        console.log('[XMU Downloader] ✓ Successfully fetched data:', data);
+        console.log('[XMU Downloader Inline] ✓ Successfully fetched data:', data);
         processFilesData(data);
       })
       .catch(error => {
-        console.error('[XMU Downloader] Fetch error:', error);
-        console.log('[XMU Downloader] Will retry with alternative methods...');
-        tryExtractFromDOM();
+        console.error('[XMU Downloader Inline] Fetch error:', error);
       });
   }
 
-  // 从DOM中提取数据的备用方法
-  function tryExtractFromDOM() {
-    console.log('[XMU Downloader] Trying to extract data from DOM...');
+  console.log('[XMU Downloader Inline] All interceptors ready!');
+  console.log('[XMU Downloader Inline] Waiting for API requests...');
 
-    // 查找可能包含文件信息的元素
-    const selectors = [
-      '[class*="upload"]',
-      '[class*="reference"]',
-      '[class*="file"]',
-      '[class*="attachment"]',
-      'a[href*="reference"]',
-      'a[href*="upload"]',
-      '[data-reference-id]',
-      '[data-file-id]'
-    ];
-
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      if (elements.length > 0) {
-        console.log(`[XMU Downloader] Found ${elements.length} elements matching: ${selector}`);
-        elements.forEach((el, i) => {
-          console.log(`[XMU Downloader]   ${i}:`, el.outerHTML.substring(0, 200));
-        });
-      }
-    });
-
-    // 查找React或Vue的数据
-    if (window.__INITIAL_STATE__ || window.__NUXT__) {
-      console.log('[XMU Downloader] Found framework state data');
-      console.log('[XMU Downloader] __INITIAL_STATE__:', window.__INITIAL_STATE__);
-      console.log('[XMU Downloader] __NUXT__:', window.__NUXT__);
-    }
-  }
-
-  // 添加一个手动触发的测试函数
-  window.XMUDownloaderManualCheck = function(testUrl) {
-    console.log('[XMU Downloader] === MANUAL CHECK ===');
-
-    if (testUrl) {
-      console.log('[XMU Downloader] Testing URL:', testUrl);
-      fetch(testUrl, { credentials: 'include' })
-        .then(r => {
-          console.log('[XMU Downloader] Fetch success, status:', r.status);
-          return r.json();
-        })
-        .then(data => {
-          console.log('[XMU Downloader] Response data:', data);
-          processFilesData(data);
-        })
-        .catch(e => {
-          console.error('[XMU Downloader] Fetch failed:', e);
-        });
-    } else {
-      // 自动从当前URL提取活动ID
-      const hashMatch = window.location.hash.match(/#\/(\d+)/);
-      if (hashMatch) {
-        const activityId = hashMatch[1];
-        console.log('[XMU Downloader] Auto-detected activity ID:', activityId);
-        const apiUrl = `https://lnt.xmu.edu.cn/api/activities/${activityId}/upload_references`;
-        console.log('[XMU Downloader] Fetching:', apiUrl);
-        fetch(apiUrl, { credentials: 'include' })
-          .then(r => r.json())
-          .then(data => {
-            console.log('[XMU Downloader] Response data:', data);
-            processFilesData(data);
-          })
-          .catch(e => console.error('[XMU Downloader] Error:', e));
-      } else {
-        console.log('[XMU Downloader] No activity ID found in current URL');
-        console.log('[XMU Downloader] Usage: XMUDownloaderManualCheck("https://lnt.xmu.edu.cn/api/activities/XXX/upload_references")');
-        console.log('[XMU Downloader] Or just: XMUDownloaderManualCheck() to auto-detect from URL');
-      }
-    }
+  // 导出测试函数
+  window.XMUDownloaderTest = function() {
+    console.log('[XMU Downloader Inline] Manual test function called');
+    checkAndFetchFiles();
   };
 
-  console.log('[XMU Downloader] Type XMUDownloaderManualCheck() to manually check current page');
-  console.log('[XMU Downloader] Or XMUDownloaderManualCheck(url) to test specific URL');
+  console.log('[XMU Downloader Inline] Type XMUDownloaderTest() to manually trigger file detection');
 })();
 
